@@ -912,13 +912,20 @@ class TerminalTab(QWidget):
         self.sort_order_button.clicked.connect(self._toggle_sort_order)
 
         nav_widget = QWidget()
-        nav_layout = QHBoxLayout(nav_widget)
+        nav_layout = QVBoxLayout(nav_widget)
         nav_layout.setContentsMargins(0, 0, 0, 0)
-        nav_layout.addWidget(self.back_button)
-        nav_layout.addWidget(self.forward_button)
-        nav_layout.addWidget(self.home_button)
-        nav_layout.addWidget(self.history_button)
-        nav_layout.addWidget(self.location_bar, 1)
+        nav_layout.setSpacing(4)
+
+        nav_buttons_layout = QHBoxLayout()
+        nav_buttons_layout.setContentsMargins(0, 0, 0, 0)
+        nav_buttons_layout.setSpacing(4)
+        nav_buttons_layout.addWidget(self.back_button)
+        nav_buttons_layout.addWidget(self.forward_button)
+        nav_buttons_layout.addWidget(self.home_button)
+        nav_buttons_layout.addWidget(self.history_button)
+
+        nav_layout.addLayout(nav_buttons_layout)
+        nav_layout.addWidget(self.location_bar)
         self.location_bar_widget = nav_widget
 
         self._git_commands_enabled = git_commands_enabled
