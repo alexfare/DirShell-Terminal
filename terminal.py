@@ -2036,21 +2036,48 @@ class TerminalApp(QMainWindow):
         widget = self.tabs.widget(index)
         if widget is self._new_tab_placeholder:
             return
-
-        if self._actual_tab_count() <= 1:
+        actual_count = self._actual_tab_count()
+        if actual_count <= 1:
             return
 
-        # Remove the tab from the UI immediately to keep the interface responsive.
-        # Perform the potentially-blocking shutdown (PTY close, process wait/kill)
-        # in a background thread so the UI thread isn't blocked when the user
-        # clicks the tab's close button.
         if isinstance(widget, TerminalTab):
-            # remove from UI first
-            self.tabs.removeTab(index)
-            # run shutdown in a daemon thread so it won't block the main loop
+            # Determine the current index of the widget (defensive: index may be stale)
+            real_index = self.tabs.indexOf(widget)
+            self.tabs.blockSignals(True)
+            try:
+                if real_index != -1:
+                    self.tabs.removeTab(real_index)
+                else:
+                    # Fallback to the provided index
+                    try:
+                        self.tabs.removeTab(index)
+                    except Exception:
+                        pass
+
+                for j in range(self.tabs.count()):
+                    w = self.tabs.widget(j)
+                    if isinstance(w, TerminalTab):
+                        self.tabs.setCurrentIndex(j)
+                        break
+            finally:
+                self.tabs.blockSignals(False)
+
             threading.Thread(target=self._shutdown_tab, args=(widget,), daemon=True).start()
+            widget.deleteLater()
         else:
-            self.tabs.removeTab(index)
+            self.tabs.blockSignals(True)
+            try:
+                try:
+                    self.tabs.removeTab(index)
+                except Exception:
+                    pass
+                for j in range(self.tabs.count()):
+                    w = self.tabs.widget(j)
+                    if isinstance(w, TerminalTab):
+                        self.tabs.setCurrentIndex(j)
+                        break
+            finally:
+                self.tabs.blockSignals(False)
 
         self._update_tab_close_buttons()
 
