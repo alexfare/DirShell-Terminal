@@ -16,6 +16,7 @@ from PyQt6.QtCore import (
     Qt,
     QThread,
     pyqtSignal,
+    QTimer,
     QEvent,
 )
 from PyQt6.QtGui import (
@@ -971,11 +972,19 @@ class TerminalTab(QWidget):
 
         splitter.addWidget(explorer_panel)
         splitter.addWidget(self.terminal)
+        try:
+            splitter.setStretchFactor(0, 0)
+            splitter.setStretchFactor(1, 1)
+            splitter.setSizes([360, 640])
+        except Exception:
+            pass
         layout.addWidget(splitter)
 
         self.reader = TerminalReader(self.master)
         self.reader.output.connect(self.handle_output)
         self.reader.start()
+        self._split_align_attempts = 0
+        QTimer.singleShot(50, self._align_splitter_to_header)
 
         self.current_directory = os.getcwd()
         self.set_directory(self.current_directory, record_history=True, update_terminal=False)
@@ -1544,6 +1553,66 @@ class TerminalTab(QWidget):
             return shlex.quote(path)
 
         return None
+
+    def _align_splitter_to_header(self) -> None:
+        """Set splitter sizes so the terminal begins just to the right of
+        the explorer header's visible columns (attempts a few times while
+        the UI is still laying out)."""
+        try:
+            header = self.tree.header()
+            col_count = self.model.columnCount()
+            total = 0
+            for i in range(col_count):
+                try:
+                    size = header.sectionSize(i)
+                except Exception:
+                    size = 0
+                total += size
+
+            self._split_align_attempts += 1
+            if total < 50 and self._split_align_attempts <= 6:
+                QTimer.singleShot(100, self._align_splitter_to_header)
+                return
+
+            padding = 12
+            left = max(total + padding, 200)
+            right = max(300, left // 2)
+            try:
+                self.findChild(type(self)).layout()  # no-op safe call
+            except Exception:
+                pass
+            try:
+                self.layout().activate()
+            except Exception:
+                pass
+            try:
+                self.parent().layout().activate()
+            except Exception:
+                pass
+
+            try:
+                self.findChild(QWidget)
+            except Exception:
+                pass
+
+            try:
+                splitter = None
+                for i in range(self.layout().count()):
+                    item = self.layout().itemAt(i)
+                    w = item.widget()
+                    if w is not None and w.__class__.__name__ == "QSplitter":
+                        splitter = w
+                        break
+                if splitter is None:
+                    for child in self.findChildren(QSplitter):
+                        splitter = child
+                        break
+                if splitter is not None:
+                    splitter.setSizes([left, max(800, left * 2)])
+            except Exception:
+                pass
+        except Exception:
+            return
 
     def delete_path(self, path: str) -> None:
         reply = QMessageBox.question(
