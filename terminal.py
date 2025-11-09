@@ -1,5 +1,6 @@
 import json
 import os
+import signal
 import pty
 import shlex
 import shutil
@@ -2013,13 +2014,33 @@ class TerminalApp(QMainWindow):
             os.close(tab.master)
         except OSError:
             pass
-        tab.reader.wait(500)
-        if tab.process.poll() is None:
-            tab.process.terminate()
-            try:
-                tab.process.wait(timeout=1)
-            except subprocess.TimeoutExpired:
-                tab.process.kill()
+
+        tab.reader.wait(200)
+
+        try:
+            if tab.process.poll() is None:
+                try:
+                    pgid = os.getpgid(tab.process.pid)
+                    os.killpg(pgid, signal.SIGTERM)
+                except Exception:
+                    try:
+                        tab.process.terminate()
+                    except Exception:
+                        pass
+
+                try:
+                    tab.process.wait(timeout=0.5)
+                except subprocess.TimeoutExpired:
+                    try:
+                        pgid = os.getpgid(tab.process.pid)
+                        os.killpg(pgid, signal.SIGKILL)
+                    except Exception:
+                        try:
+                            tab.process.kill()
+                        except Exception:
+                            pass
+        except Exception:
+            pass
 
     def _tab_title(self, tab: TerminalTab) -> str:
         path = tab.location_display.text()
@@ -2082,10 +2103,17 @@ class TerminalApp(QMainWindow):
         self._update_tab_close_buttons()
 
     def closeEvent(self, event) -> None:  # noqa: N802 - Qt override
+        # Shutdown each tab asynchronously so the GUI can close without
+        # blocking on process/thread teardown. Each call runs in a daemon
+        # thread and performs best-effort termination of the shell and
+        # reader thread.
         for index in range(self.tabs.count()):
             widget = self.tabs.widget(index)
             if isinstance(widget, TerminalTab):
-                self._shutdown_tab(widget)
+                threading.Thread(
+                    target=self._shutdown_tab, args=(widget,), daemon=True
+                ).start()
+
         super().closeEvent(event)
         self._save_config()
         if self in OPEN_WINDOWS:
