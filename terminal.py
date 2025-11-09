@@ -5,6 +5,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import threading
 from pathlib import Path
 
 from PyQt6.QtCore import (
@@ -2039,9 +2040,18 @@ class TerminalApp(QMainWindow):
         if self._actual_tab_count() <= 1:
             return
 
+        # Remove the tab from the UI immediately to keep the interface responsive.
+        # Perform the potentially-blocking shutdown (PTY close, process wait/kill)
+        # in a background thread so the UI thread isn't blocked when the user
+        # clicks the tab's close button.
         if isinstance(widget, TerminalTab):
-            self._shutdown_tab(widget)
-        self.tabs.removeTab(index)
+            # remove from UI first
+            self.tabs.removeTab(index)
+            # run shutdown in a daemon thread so it won't block the main loop
+            threading.Thread(target=self._shutdown_tab, args=(widget,), daemon=True).start()
+        else:
+            self.tabs.removeTab(index)
+
         self._update_tab_close_buttons()
 
     def closeEvent(self, event) -> None:  # noqa: N802 - Qt override
