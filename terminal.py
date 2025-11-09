@@ -2148,4 +2148,15 @@ if __name__ == "__main__":
     win = TerminalApp()
     win.resize(1000, 600)
     win.show()
+    try:
+        screen = app.primaryScreen()
+        if screen is not None:
+            geom = screen.availableGeometry()
+            x = geom.x() + (geom.width() - win.width()) // 2
+            y = geom.y() + (geom.height() - win.height()) // 2
+            win.move(x, y)
+    except Exception:
+        # Best-effort; don't crash startup if something unusual occurs.
+        pass
+
     sys.exit(app.exec())
